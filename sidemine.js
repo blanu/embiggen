@@ -6,6 +6,104 @@ var currentstage; // The stage that is currently playing
 
 var firstLoad=true;
 
+ChunkMap=function(dbname, x, y) {
+  this.x=x;
+  this.y=y;
+
+  this.chunks=[[[],[],[]],[[],[],[]],[[],[],[]]];
+
+  this.mapFromChunks=function()
+  {
+    var map=[];
+
+    for(var y=0; y<3; y++)
+    {
+      var firstChunk=this.chunks[y][0];
+
+      for(var i=0; i<firstChunk.length; i++)
+      {
+        var row=[];
+
+        for(var x=0; x<3; x++)
+        {
+          var chunk=this.chunks[y][x];
+          log('adding row:');
+          log(chunk[i]);
+          row=row.concat(chunk[i]);
+          log('new row:');
+          log(row);
+        }
+
+        map.push(row);
+      }
+    }
+
+    return map;
+  }
+
+  var chunkMap=this;
+
+  this.gotChunk=function(doc, chunk)
+  {
+    log('gotChunk:');
+    log(doc);
+    log(chunk);
+    for(var y=0; y<3; y++)
+    {
+      for(var x=0; x<3; x++)
+      {
+        chunkMap.chunks[y][x]=chunk;
+      }
+    }
+
+    log('chunks:');
+    log(chunkMap.chunks);
+
+    var map=chunkMap.mapFromChunks();
+
+    log('map:');
+    log(map);
+
+    if(firstLoad)
+    {
+      log('firstLoad');
+      firstLoad=false;
+
+      var mapdata={"tileset":"tiles","map":map};
+      tilemaps['0_0']=help.finalizeTilemap(mapdata);
+
+  		gbox.loadAll(go);
+    }
+    else
+    {
+      log('nextLoad');
+      log('before:');
+      log(tilemaps['0_0']['map']);
+      tilemaps['0_0']['map']=map;
+      log('after:');
+      log(tilemaps['0_0']['map']);
+
+      var mapdata={"tileset":"tiles","map":map};
+      tilemaps['0_0']=help.finalizeTilemap(mapdata);
+      tilemaps['0_0'].tileIsSolidCeil=function(obj,t){ return (obj.group=="foes"?false:t==0) };
+      tilemaps['0_0'].tileIsSolidFloor=function(obj,t){ return t!=null };
+      gbox.blitTilemap(gbox.getCanvasContext("tileslayer"),tilemaps[currentstage]);
+    }
+  }
+
+  this.loadChunk=function(dbid, docid)
+  {
+    var db=freefall.Database('http://freefall.blanu.net', dbid);
+    var doc=db.get(docid);
+    doc.setDocCallback(this.gotChunk);
+    doc.get();
+  }
+
+  this.loadChunk(dbname, 'level-0_0');
+
+  return this;
+};
+
 mapobjects['0_0']={items:[
 {objecttype:"player", x:40, y:40, side:1},
 {objecttype:"squid", x:80, y:40, side:1},
@@ -207,9 +305,10 @@ function go()
 
 		  	},
 		  	blit:function() {
-
 		  		if (!this.killed)
+          {
 		  			gbox.blitTile(gbox.getBufferContext(),{tileset:this.tileset,tile:this.frame,dx:this.x,dy:this.y,camera:this.camera,fliph:this.side,flipv:this.flipv});
+          }
 		  	}
 
 		  });
@@ -230,47 +329,6 @@ function go()
 
 	}
 
-  function gotMap(map)
-  {
-    log('map:');
-    log(map);
-    log(typeof(map));
-
-    if(firstLoad)
-    {
-      log('firstLoad');
-      firstLoad=false;
-
-      var mapdata={"tileset":"tiles","map":map};
-      tilemaps['0_0']=help.finalizeTilemap(mapdata);
-
-  		gbox.loadAll(go);
-    }
-    else
-    {
-      log('nextLoad');
-      log('before:');
-      log(tilemaps['0_0']['map']);
-      tilemaps['0_0']['map']=map;
-      log('after:');
-      log(tilemaps['0_0']['map']);
-
-      var mapdata={"tileset":"tiles","map":map};
-      tilemaps['0_0']=help.finalizeTilemap(mapdata);
-      tilemaps['0_0'].tileIsSolidCeil=function(obj,t){ return (obj.group=="foes"?false:t==0) };
-      tilemaps['0_0'].tileIsSolidFloor=function(obj,t){ return t!=null };
-      gbox.blitTilemap(gbox.getCanvasContext("tileslayer"),tilemaps[currentstage]);
-    }
-  }
-
-  function loadMap(dbid, docid)
-  {
-    var db=freefall.Database('http://freefall.blanu.net', dbid);
-    var doc=db.get(docid);
-    doc.setDocCallback(gotMap);
-    doc.get();
-  }
-
 	// BOOTSTRAP
 	gbox.onLoad(function ()
   {
@@ -284,7 +342,5 @@ function go()
     gbox.addTiles({id:"enemy-sad",image:"sprites",tileh:40,tilew:20,tilerow:9,gapx:0,gapy:80});
     gbox.addTiles({id:"tiledfont",image:"font",tileh:8,tilew:8,tilerow:255,gapx:0,gapy:8});
 
-    loadMap('sidemine', 'level-0_0');
-
-//    gbox.loadAll(go);
+    chunkmap=ChunkMap('sidemine', 1, 1);
   }, false);
