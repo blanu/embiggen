@@ -1,7 +1,11 @@
 var maingame;
+var chunkmap;
 var mapdata;
-var map;
+var map=null;
 var orientation=false;
+var center=Math.floor((16*16*3)/2)+8;
+var lowEdge=(center-128)-16;
+var highEdge=(center+128)-16;
 
 function addAssets()
 {
@@ -41,9 +45,24 @@ function addPlayer() {
 
     initialize: function()
     {
-      toys.topview.initialize(this, {});
-      this.x = 200;
-      this.y = 64;
+      toys.topview.initialize(this, {
+        haspushing: false,
+        frames:{
+          standup:{ speed:1, frames:[1] },
+          standdown:{ speed:1, frames:[1] },
+          standleft:{ speed:1, frames:[1] },
+          standright:{ speed:1, frames:[1] },
+          movingup:{speed:3,frames:[1] },
+          movingdown:{speed:3,frames:[1] },
+          movingleft:{speed:3,frames:[1] },
+          movingright:{speed:3,frames:[1] },
+        }
+      });
+
+      this.frame=2;
+
+      this.x = center;
+      this.y = center;
     },
 
     first: function()
@@ -62,6 +81,36 @@ function addPlayer() {
         orientation=true;
       }
       // else, leave it as it is
+
+      var offsetX=0;
+      var offsetY=0;
+
+      if(this.x<lowEdge)
+      {
+        this.x=this.x+256;
+        offsetX=-1;
+      }
+      else if(this.x>highEdge)
+      {
+        this.x=this.x-256;
+        offsetX=1;
+      }
+
+      if(this.y<lowEdge)
+      {
+        this.y=this.y+256;
+        offsetY=-1;
+      }
+      else if(this.y>highEdge)
+      {
+        this.y=this.y-256;
+        offsetY=1;
+      }
+
+      if(offsetX!=0 || offsetY!=0)
+      {
+        chunkmap.move(offsetX, offsetY);
+      }
     },
 
     blit: function()
@@ -96,10 +145,8 @@ function addMap()
 {
   map = {
     tileset: 'terrainTiles',
-//    map: loadMap(),
     map: mapdata,
     tileIsSolid: function(obj, t) {
-//      return t != null;
       return false;
     }
   }
@@ -112,8 +159,8 @@ function addMap()
 
     blit: function() {
       gbox.blitFade(gbox.getBufferContext(), { alpha: 1 });
-//      gbox.centerCamera(gbox.getObject('chars', 'player'), {w: map.w, h: map.h});
-      followCamera(gbox.getObject('chars', 'player'), {w: map.w, h: map.h});
+      gbox.centerCamera(gbox.getObject('chars', 'player'), {w: map.w, h: map.h});
+//      followCamera(gbox.getObject('chars', 'player'), {w: map.w, h: map.h});
       gbox.blit(gbox.getBufferContext(), gbox.getCanvas('map_canvas'), { dx: 0, dy: 0, dw: gbox.getCanvas('map_canvas').width, dh: gbox.getCanvas('map_canvas').height, sourcecamera: true });
       updateHUD();
     }
@@ -155,6 +202,23 @@ function main()
   {
     log("initializeGame");
     addPlayer();
+
+    // First load map, then start game
+    chunkmap=ChunkMap('surface', 1, 1, function() {
+      if(map!=null)
+      {
+        mapdata=chunkmap.mapFromChunks();
+        map.map=mapdata;
+        gbox.blitTilemap(gbox.getCanvasContext('map_canvas'), map);
+      }
+      else
+      {
+        log('map undefined');
+      }
+    });
+
+    mapdata=chunkmap.mapFromChunks();
+
     addMap();
 
     gbox.createCanvas('map_canvas', { w: map.w, h: map.h });
@@ -168,20 +232,13 @@ function main()
     log("changeLevel");
   }
 
-  // First load map, then start game
-  chunkmap=ChunkMap('surface', 1, 1, function() {
-    log('starting game');
-
-    mapdata=chunkmap.mapFromChunks();
-
-    gbox.go();
-  });
+  gbox.go();
 }
 
 function initFresh()
 {
   log('initFresh');
-  help.akihabaraInit({title: 'Embiggen', width: 320, height: 320, zoom: 2});
+  help.akihabaraInit({title: 'Embiggen', width: 256, height: 256, zoom: 2});
 
   addAssets();
 
