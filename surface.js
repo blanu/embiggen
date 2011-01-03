@@ -34,6 +34,17 @@ function addAssets()
     gapx:    0,
     gapy:    0
   });
+
+  gbox.addImage('objectSprite', 'resources/embiggen/oryx_lofi/lofi_obj_16.png');
+  gbox.addTiles({
+    id:      'objectTiles',
+    image:   'objectSprite',
+    tileh:   16,
+    tilew:   16,
+    tilerow: 16,
+    gapx:    0,
+    gapy:    0
+  });
 }
 
 function addPlayer() {
@@ -188,7 +199,7 @@ function updateHUD()
 function main()
 {
   log("main");
-  gbox.setGroups(['terrain', 'chars', 'game']);
+  gbox.setGroups(['terrain', 'object', 'chars', 'game']);
   maingame = gamecycle.createMaingame('game', 'game');
 
   maingame.pressStartIntroAnimation=function(reset) { return true; }
