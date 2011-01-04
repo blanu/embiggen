@@ -22,11 +22,16 @@ exports.POST = function (request) {
     var params = new Request(request).params
     logging.info("params: "+JSON.stringify(params));
 
+    params=JSON.parse(params['value']);
+    logging.info("params: "+JSON.stringify(params));
+
     if(params['type']=='object')
     {
       var chunkX=params['chunkX'];
       var chunkY=params['chunkY'];
       var chunkId=chunkX+'_'+chunkY;
+
+      logging.info("object");
 
       return {
         status: 200,
@@ -36,6 +41,7 @@ exports.POST = function (request) {
     }
     else
     {
+      logging.info("not object");
       return {
         status: 200,
         headers: {"Content-Type": "application/json"},
