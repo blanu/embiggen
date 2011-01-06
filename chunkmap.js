@@ -1,14 +1,16 @@
-ChunkMap=function(dbname, x, y, callback) {
+ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
   this.x=x;
   this.y=y;
   this.dbname=dbname;
   this.callback=callback;
+  this.addObjCallback=addObj;
+  this.delObjCallback=delObj;
 
   this.max=0;
 
   this.cache={};
 
-  this.default=[
+  this.defaultChunk=[
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
@@ -28,10 +30,25 @@ ChunkMap=function(dbname, x, y, callback) {
   ];
 
   this.chunks=[
-    [this.default, this.default, this.default],
-    [this.default, this.default, this.default],
-    [this.default, this.default, this.default]
+    [this.defaultChunk, this.defaultChunk, this.defaultChunk],
+    [this.defaultChunk, this.defaultChunk, this.defaultChunk],
+    [this.defaultChunk, this.defaultChunk, this.defaultChunk]
   ];
+
+  this.objectList=[];
+  this.objects=[
+    [[], [], []],
+    [[], [], []],
+    [[], [], []]
+  ];
+
+  this.diff=function(a, b)
+  {
+    var uniqA=a.filter(function(x) {return b.indexOf(x)<0});
+    var uniqB=b.filter(function(x) {return a.indexOf(x)<0});
+
+    return [uniqA, uniqB];
+  }
 
   this.mapFromChunks=function()
   {
@@ -56,6 +73,24 @@ ChunkMap=function(dbname, x, y, callback) {
     }
 
     return map;
+  }
+
+  this.objectsFromChunks=function()
+  {
+    var results=[];
+
+    for(var y=0; y<3; y++)
+    {
+      for(var x=0; x<3; x++)
+      {
+        for(var i=0; i<this.objects[y][x].length; i++)
+        {
+          results.push(this.objects[y][x][i]);
+        }
+      }
+    }
+
+    return results;
   }
 
   this.move=function(offsetX, offsetY)
@@ -94,7 +129,11 @@ ChunkMap=function(dbname, x, y, callback) {
         {
           this.chunks[y][0]=this.chunks[y][1];
           this.chunks[y][1]=this.chunks[y][2];
-          this.chunks[y][2]=this.default;
+          this.chunks[y][2]=this.defaultChunk;
+
+          this.objects[y][0]=this.objects[y][1];
+          this.objects[y][1]=this.objects[y][2];
+          this.objects[y][2]=[];
         }
 
         this.loadChunk(this.dbname, this.x+1, this.y);
@@ -107,7 +146,11 @@ ChunkMap=function(dbname, x, y, callback) {
         {
           this.chunks[y][2]=this.chunks[y][1];
           this.chunks[y][1]=this.chunks[y][0];
-          this.chunks[y][0]=this.default;
+          this.chunks[y][0]=this.defaultChunk;
+
+          this.objects[y][2]=this.objects[y][1];
+          this.objects[y][1]=this.objects[y][0];
+          this.objects[y][0]=[];
         }
 
         this.loadChunk(this.dbname, this.x-1, this.y);
@@ -122,7 +165,11 @@ ChunkMap=function(dbname, x, y, callback) {
       {
         this.chunks[0]=this.chunks[1]
         this.chunks[1]=this.chunks[2]
-        this.chunks[2]=[this.default, this.default, this.default];
+        this.chunks[2]=[this.defaultChunk, this.defaultChunk, this.defaultChunk];
+
+        this.objects[0]=this.objects[1]
+        this.objects[1]=this.objects[2]
+        this.objects[2]=[[], [], []];
 
         this.loadChunk(this.dbname, this.x, this.y+1);
         this.loadChunk(this.dbname, this.x+1, this.y+1);
@@ -132,7 +179,11 @@ ChunkMap=function(dbname, x, y, callback) {
       {
         this.chunks[2]=this.chunks[1]
         this.chunks[1]=this.chunks[0]
-        this.chunks[0]=[this.default, this.default, this.default];
+        this.chunks[0]=[this.defaultChunk, this.defaultChunk, this.defaultChunk];
+
+        this.objects[2]=this.objects[1]
+        this.objects[1]=this.objects[0]
+        this.objects[0]=[[], [], []];
 
         this.loadChunk(this.dbname, this.x, this.y-1);
         this.loadChunk(this.dbname, this.x+1, this.y-1);
@@ -148,6 +199,171 @@ ChunkMap=function(dbname, x, y, callback) {
 
   var chunkMap=this;
 
+  this.gotConfig=function(data) {
+    chunkMap.max=data['size'];
+  }
+
+  this.configCallback=function(e)
+  {
+    var args=e.data;
+    var docname=args['docname'];
+    var data=args['data'];
+
+    chunkMap.gotConfig(data);
+  }
+
+  this.loadConfig=function(dbid)
+  {
+    var docid='config';
+
+    if(docid in this.cache)
+    {
+      this.gotConfig(this.cache[docid]);
+    }
+    else
+    {
+      loader=new Worker('chunkLoader.js');
+      loader.onmessage=this.configCallback;
+      loader.onerror=function(e) {
+        log('Error in web worker:');
+        log(e);
+
+        loader.terminate();
+      };
+
+      loader.postMessage({'baseUrl': 'http://freefall.blanu.net', 'dbname': dbid, 'docname': docid});
+    }
+  }
+
+  this.gotObjects=function(docname, objects)
+  {
+//    log('gotObjects:');
+//    log(objects);
+
+    this.cache[docname]=objects;
+
+    var firstObject=objects[0];
+    chunkX=firstObject['chunkX']
+    chunkY=firstObject['chunkY']
+
+    if(this.max>0)
+    {
+      if(chunkMap.x==0)
+      {
+        if(chunkX==(this.max-1))
+        {
+          chunkX=-1
+        }
+      }
+
+      if(chunkMap.x==(this.max-1))
+      {
+        if(chunkX==0)
+        {
+          chunkX=this.max
+        }
+      }
+
+      if(chunkMap.y==0)
+      {
+        if(chunkY==(this.max-1))
+        {
+          chunkY=-1
+        }
+      }
+
+      if(chunkMap.y==(this.max-1))
+      {
+        if(chunkY==0)
+        {
+          chunkY=this.max
+        }
+      }
+    }
+
+    var localX=chunkX-this.x+1;
+    var localY=chunkY-this.y+1;
+
+    if(localX>=0 && localX<=2 && localY>=0 && localY<=2)
+    {
+      log('Saving objects ('+chunkX+','+chunkY+') as ('+localX+','+localY+')');
+      chunkMap.objects[localY][localX]=objects;
+    }
+    else
+    {
+      log('Chunk not local '+chunkX+' '+chunkY+' '+localX+' '+localY);
+    }
+
+    var oldList=chunkMap.objectList;
+    chunkMap.objectList=chunkMap.objectsFromChunks();
+
+    log('comparing lists:');
+    log(oldList);
+    log(chunkMap.objectList);
+
+    var diffs=chunkMap.diff(chunkMap.objectList, oldList);
+    var adds=diffs[0];
+    var dels=diffs[1];
+
+    log(diffs);
+
+    if(dels.length>0 && chunkMap.delObjCallback!=null)
+    {
+      chunkMap.delObjCallback(dels);
+    }
+
+    gbox.purgeGarbage()
+
+    if(adds.length>0 && chunkMap.addObjCallback!=null)
+    {
+      chunkMap.addObjCallback(adds);
+    }
+  }
+
+  this.objectsLoaderCallback=function(e)
+  {
+//    log('loader callback:');
+//    log(e.data);
+    var args=e.data;
+
+    if(args!=null)
+    {
+      var docname=args['viewkey'];
+      var data=args['results'];
+
+      if(data.length>0)
+      {
+        chunkMap.gotObjects(docname, data);
+      }
+    }
+  }
+
+  this.loadObjects=function(dbid, x, y)
+  {
+    // No need to translate x and y for wrapping as long as loadObjects is only called at the end of loadChunk, after translation has been done
+
+    var viewid='objectsByChunk';
+    var key=x+'_'+y;
+
+    if(key in this.cache)
+    {
+      this.gotObjects(key, this.cache[key]);
+    }
+    else
+    {
+      loader=new Worker('viewLoader.js');
+      loader.onmessage=this.objectsLoaderCallback;
+      loader.onerror=function(e) {
+        log('Error in web worker:');
+        log(e);
+
+        loader.terminate();
+      };
+
+      loader.postMessage({'baseUrl': 'http://freefall.blanu.net', 'dbname': dbid, 'viewname': viewid, 'key': key});
+    }
+  }
+
   this.gotChunk=function(docname, chunk)
   {
 //    log('gotChunk: '+docname);
@@ -158,8 +374,6 @@ ChunkMap=function(dbname, x, y, callback) {
     var coords=parts[1].split('_');
     var chunkX=parseFloat(coords[0]);
     var chunkY=parseFloat(coords[1]);
-
-    this.cache[docname]=chunk;
 
     if(this.max>0)
     {
@@ -217,42 +431,6 @@ ChunkMap=function(dbname, x, y, callback) {
     }
   }
 
-  this.gotConfig=function(data) {
-    chunkMap.max=data['size'];
-  }
-
-  this.configCallback=function(e)
-  {
-    var args=e.data;
-    var docname=args['docname'];
-    var data=args['data'];
-
-    chunkMap.gotConfig(data);
-  }
-
-  this.loadConfig=function(dbid)
-  {
-    var docid='config';
-
-    if(docid in this.cache)
-    {
-      this.gotConfig(this.cache[docid]);
-    }
-    else
-    {
-      loader=new Worker('chunkLoader.js');
-      loader.onmessage=this.configCallback;
-      loader.onerror=function(e) {
-        log('Error in web worker:');
-        log(e);
-
-        loader.terminate();
-      };
-
-      loader.postMessage({'baseUrl': 'http://freefall.blanu.net', 'dbname': dbid, 'docname': docid});
-    }
-  }
-
   this.loadChunk=function(dbid, x, y)
   {
 //    log('this.loadChunk '+dbid+' '+x+' '+y+' '+this.max);
@@ -278,6 +456,7 @@ ChunkMap=function(dbname, x, y, callback) {
     }
 
     var docid='level-'+x+'_'+y;
+    var viewid=x+'_'+y;
 
     if(docid in this.cache)
     {
@@ -297,6 +476,8 @@ ChunkMap=function(dbname, x, y, callback) {
 
       loader.postMessage({'baseUrl': 'http://freefall.blanu.net', 'dbname': dbid, 'docname': docid});
     }
+
+    this.loadObjects(dbid, x, y);
   }
 
   this.loaderCallback=function(e)

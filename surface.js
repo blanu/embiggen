@@ -7,6 +7,16 @@ var center=Math.floor((16*16*3)/2)+8;
 var lowEdge=(center-128)-16;
 var highEdge=(center+128)-16;
 
+triggers={
+  teleport: function(portal) {
+    var world=portal.config.world;
+    var chunkX=portal.config.chunkX;
+    var chunkY=portal.config.chunkY;
+
+    log('teleporting to '+world+'/('+chunkX+','+chunkY+')');
+  }
+};
+
 function addAssets()
 {
   gbox.addImage('font', 'resources/embiggen/font.png');
@@ -45,6 +55,25 @@ function addAssets()
     gapx:    0,
     gapy:    0
   });
+}
+
+function moveObjects(offsetX, offsetY)
+{
+  var objs=chunkmap.objectsFromChunks();
+  for(var i=0; i<objs.length; i++)
+  {
+    var obj=objs[i];
+    var chunkX=obj.chunkX;
+    var chunkY=obj['chunkY'];
+    var tileX=obj['tileX'];
+    var tileY=obj['tileY'];
+
+    var id='object-'+chunkX+'-'+chunkY+'-'+tileX+'-'+tileY;
+
+    var o=gbox.getObject('objects', id);
+    o.x=o.x-(offsetX*256);
+    o.y=o.y-(offsetY*256);
+  }
 }
 
 function addPlayer() {
@@ -120,6 +149,7 @@ function addPlayer() {
 
       if(offsetX!=0 || offsetY!=0)
       {
+        moveObjects(offsetX, offsetY);
         chunkmap.move(offsetX, offsetY);
       }
     },
@@ -196,10 +226,89 @@ function updateHUD()
   maingame.hud.redraw();
 }
 
+function addObjects(objs)
+{
+  log('addObjects');
+  log(objs);
+
+  for(var i=0; i<objs.length; i++)
+  {
+    var obj=objs[i];
+    log(obj);
+    var chunkX=obj.chunkX;
+    var chunkY=obj['chunkY'];
+    var tileX=obj['tileX'];
+    var tileY=obj['tileY'];
+    var frame=obj['tile'];
+
+    var localX=chunkX-chunkmap.x+1;
+    var localY=chunkY-chunkmap.y+1;
+
+    log('trying to add '+chunkX+' '+chunkY+' '+tileX+' '+tileY+' '+frame);
+
+    gbox.addObject({
+      id: 'object-'+chunkX+'-'+chunkY+'-'+tileX+'-'+tileY,
+      group: 'objects',
+      tileset: 'objectTiles',
+      colh:gbox.getTiles('objectTiles').tileh,
+
+      initialize: function()
+      {
+        toys.topview.initialize(this, {});
+        this.x = (localX*16*16)+(tileX*16);
+        this.y = (localY*16*16)+(tileY*16);
+        this.frame=frame;
+        log('added object '+this.x+','+this.y+'/'+this.frame);
+      },
+
+      first: function()
+      {
+      },
+
+      blit: function()
+      {
+        gbox.blitTile(gbox.getBufferContext(), {
+          tileset: this.tileset,
+          tile:    this.frame,
+          dx:      this.x,
+          dy:      this.y,
+          fliph:   this.fliph,
+          flipv:   this.flipv,
+          camera:  this.camera,
+          alpha:   1.0
+        });
+      },
+    });
+  }
+}
+
+function delObjects(objs)
+{
+  log('delObjects');
+  log(objs);
+
+  for(var i=0; i<objs.length; i++)
+  {
+    var obj=objs[i];
+    log(obj);
+
+    var chunkX=obj.chunkX;
+    var chunkY=obj['chunkY'];
+    var tileX=obj['tileX'];
+    var tileY=obj['tileY'];
+    var frame=obj['tile'];
+    var id='object-'+chunkX+'-'+chunkY+'-'+tileX+'-'+tileY;
+
+    var o=gbox.getObject('objects', id);
+
+    gbox.trashObject(o);
+  }
+}
+
 function main()
 {
   log("main");
-  gbox.setGroups(['terrain', 'object', 'chars', 'game']);
+  gbox.setGroups(['terrain', 'objects', 'chars', 'game']);
   maingame = gamecycle.createMaingame('game', 'game');
 
   maingame.pressStartIntroAnimation=function(reset) { return true; }
@@ -226,7 +335,7 @@ function main()
       {
         log('map undefined');
       }
-    });
+    }, addObjects, delObjects);
 
     mapdata=chunkmap.mapFromChunks();
 
