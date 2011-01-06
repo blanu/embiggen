@@ -6,16 +6,32 @@ var orientation=false;
 var center=Math.floor((16*16*3)/2)+8;
 var lowEdge=(center-128)-16;
 var highEdge=(center+128)-16;
+var triggered=false;
+var playerData=null;
 
 triggers={
-  teleport: function(portal) {
-    var world=portal.config.world;
-    var chunkX=portal.config.chunkX;
-    var chunkY=portal.config.chunkY;
+  teleport: function(args) {
+    var world=args.world;
+    var chunkX=args.chunkX;
+    var chunkY=args.chunkY;
 
     log('teleporting to '+world+'/('+chunkX+','+chunkY+')');
   }
 };
+
+function triggerAction(action, args)
+{
+  triggered=true;
+  if(triggers.hasOwnProperty(action))
+  {
+    var f=triggers[action];
+    f(args);
+  }
+  else
+  {
+    log('Unknown action '+action);
+  }
+}
 
 function addAssets()
 {
@@ -73,7 +89,7 @@ function moveObjects(offsetX, offsetY)
   }
 }
 
-function addPlayer() {
+function addPlayer(tile, x, y) {
   gbox.addObject({
     id: 'player',
     group: 'chars',
@@ -96,10 +112,10 @@ function addPlayer() {
         }
       });
 
-      this.frame=2;
+      this.frame=tile;
 
-      this.x = center;
-      this.y = center;
+      this.x = x;
+      this.y = y;
     },
 
     first: function()
@@ -165,6 +181,15 @@ function addPlayer() {
       });
     },
   });
+}
+
+function gotPlayer(doc, data)
+{
+  log('got player');
+  log(data);
+  playerData=data;
+
+  gbox.go();
 }
 
 function followCamera(obj, viewdata)
@@ -238,6 +263,13 @@ function addObjects(objs)
     var tileX=obj['tileX'];
     var tileY=obj['tileY'];
     var frame=obj['tile'];
+    var trigger=null;
+    var config=null;
+    if(obj.hasOwnProperty('trigger'))
+    {
+      trigger=obj.trigger;
+      config=obj.config;
+    }
 
     var localX=chunkX-chunkmap.x+1;
     var localY=chunkY-chunkmap.y+1;
@@ -249,6 +281,8 @@ function addObjects(objs)
       group: 'objects',
       tileset: 'objectTiles',
       colh:gbox.getTiles('objectTiles').tileh,
+      trigger: trigger,
+      config: config,
 
       initialize: function()
       {
@@ -261,6 +295,16 @@ function addObjects(objs)
 
       first: function()
       {
+        var player=gbox.getObject("chars","player");
+        if (toys.topview.collides(this,player))
+        {
+          if(this.trigger!=null && !triggered)
+          {
+            log('triggered action!');
+            triggerAction(this.trigger, this.config);
+            triggered=true;
+          }
+        }
       },
 
       blit: function()
@@ -313,10 +357,12 @@ function main()
   maingame.initializeGame=function()
   {
     log("initializeGame");
-    addPlayer();
+    var x=(playerData.chunkX*16*16)+(playerData.tileX*16);
+    var y=(playerData.chunkY*16*16)+(playerData.tileY*16);
+    addPlayer(playerData.tile, x, y);
 
     // First load map, then start game
-    chunkmap=ChunkMap('surface', 1, 1, function() {
+    chunkmap=ChunkMap(playerData.world, playerData.chunkX, playerData.chunkY, function() {
       if(map!=null)
       {
         mapdata=chunkmap.mapFromChunks();
@@ -343,8 +389,6 @@ function main()
   {
     log("changeLevel");
   }
-
-  gbox.go();
 }
 
 function initFresh()
@@ -356,6 +400,8 @@ function initFresh()
 
   gbox.setCallback(main);
   gbox.loadAll();
+
+  getPlayer('blanu');
 }
 
 $(document).ready(initFresh);
