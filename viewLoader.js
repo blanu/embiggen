@@ -2,7 +2,7 @@ importScripts('http://beta.freefalldb.com/scripts/freefall.js');
 
 gotView=function(view, data)
 {
-  postMessage({'baseUrl': view.db.base, 'dbname': view.db.dbid, 'viewname': view.viewid, 'viewkey': view.viewkey, 'results': data.results});
+  postMessage({'baseUrl': view.db.base, 'dbname': view.db.dbid, 'viewname': view.viewid, 'viewkey': data.viewkey, 'results': data.results});
   close();
 }
 

@@ -60,15 +60,12 @@ function addAssets()
 function moveObjects(offsetX, offsetY)
 {
   var objs=chunkmap.objectsFromChunks();
+  log('moving:');
+  log(objs);
   for(var i=0; i<objs.length; i++)
   {
     var obj=objs[i];
-    var chunkX=obj.chunkX;
-    var chunkY=obj['chunkY'];
-    var tileX=obj['tileX'];
-    var tileY=obj['tileY'];
-
-    var id='object-'+chunkX+'-'+chunkY+'-'+tileX+'-'+tileY;
+    var id=obj.objectId;
 
     var o=gbox.getObject('objects', id);
     o.x=o.x-(offsetX*256);
@@ -235,6 +232,7 @@ function addObjects(objs)
   {
     var obj=objs[i];
     log(obj);
+    var id=obj.objectId;
     var chunkX=obj.chunkX;
     var chunkY=obj['chunkY'];
     var tileX=obj['tileX'];
@@ -247,7 +245,7 @@ function addObjects(objs)
     log('trying to add '+chunkX+' '+chunkY+' '+tileX+' '+tileY+' '+frame);
 
     gbox.addObject({
-      id: 'object-'+chunkX+'-'+chunkY+'-'+tileX+'-'+tileY,
+      id: id,
       group: 'objects',
       tileset: 'objectTiles',
       colh:gbox.getTiles('objectTiles').tileh,
@@ -258,7 +256,7 @@ function addObjects(objs)
         this.x = (localX*16*16)+(tileX*16);
         this.y = (localY*16*16)+(tileY*16);
         this.frame=frame;
-        log('added object '+this.x+','+this.y+'/'+this.frame);
+        log('added object '+this.id+':'+this.x+','+this.y+'/'+this.frame);
       },
 
       first: function()
@@ -292,13 +290,7 @@ function delObjects(objs)
     var obj=objs[i];
     log(obj);
 
-    var chunkX=obj.chunkX;
-    var chunkY=obj['chunkY'];
-    var tileX=obj['tileX'];
-    var tileY=obj['tileY'];
-    var frame=obj['tile'];
-    var id='object-'+chunkX+'-'+chunkY+'-'+tileX+'-'+tileY;
-
+    var id=obj.objectId;
     var o=gbox.getObject('objects', id);
 
     gbox.trashObject(o);

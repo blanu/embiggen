@@ -35,6 +35,8 @@ ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
     [this.defaultChunk, this.defaultChunk, this.defaultChunk]
   ];
 
+  this.chunksLoaded=0;
+
   this.objectList=[];
   this.objects=[
     [[], [], []],
@@ -134,6 +136,7 @@ ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
           this.objects[y][0]=this.objects[y][1];
           this.objects[y][1]=this.objects[y][2];
           this.objects[y][2]=[];
+          this.sendObjectChanges();
         }
 
         this.loadChunk(this.dbname, this.x+1, this.y);
@@ -151,6 +154,7 @@ ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
           this.objects[y][2]=this.objects[y][1];
           this.objects[y][1]=this.objects[y][0];
           this.objects[y][0]=[];
+          this.sendObjectChanges();
         }
 
         this.loadChunk(this.dbname, this.x-1, this.y);
@@ -170,6 +174,7 @@ ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
         this.objects[0]=this.objects[1]
         this.objects[1]=this.objects[2]
         this.objects[2]=[[], [], []];
+        this.sendObjectChanges();
 
         this.loadChunk(this.dbname, this.x, this.y+1);
         this.loadChunk(this.dbname, this.x+1, this.y+1);
@@ -184,6 +189,7 @@ ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
         this.objects[2]=this.objects[1]
         this.objects[1]=this.objects[0]
         this.objects[0]=[[], [], []];
+        this.sendObjectChanges();
 
         this.loadChunk(this.dbname, this.x, this.y-1);
         this.loadChunk(this.dbname, this.x+1, this.y-1);
@@ -216,7 +222,8 @@ ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
   {
     var docid='config';
 
-    if(docid in this.cache)
+//    if(docid in this.cache)
+    if(this.cache.hasOwnProperty(docid))
     {
       this.gotConfig(this.cache[docid]);
     }
@@ -238,81 +245,94 @@ ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
   this.gotObjects=function(docname, objects)
   {
 //    log('gotObjects:');
+//    log(docname);
 //    log(objects);
 
+//    log('storing '+docname+' in cache');
+//    log(this.cache);
     this.cache[docname]=objects;
+//    log(this.cache);
 
-    var firstObject=objects[0];
-    chunkX=firstObject['chunkX']
-    chunkY=firstObject['chunkY']
-
-    if(this.max>0)
+    if(objects.length>0)
     {
-      if(chunkMap.x==0)
+      var firstObject=objects[0];
+      chunkX=firstObject['chunkX']
+      chunkY=firstObject['chunkY']
+
+      if(this.max>0)
       {
-        if(chunkX==(this.max-1))
+        if(chunkMap.x==0)
         {
-          chunkX=-1
+          if(chunkX==(this.max-1))
+          {
+            chunkX=-1
+          }
+        }
+
+        if(chunkMap.x==(this.max-1))
+        {
+          if(chunkX==0)
+          {
+            chunkX=this.max
+          }
+        }
+
+        if(chunkMap.y==0)
+        {
+          if(chunkY==(this.max-1))
+          {
+            chunkY=-1
+          }
+        }
+
+        if(chunkMap.y==(this.max-1))
+        {
+          if(chunkY==0)
+          {
+            chunkY=this.max
+          }
         }
       }
 
-      if(chunkMap.x==(this.max-1))
-      {
-        if(chunkX==0)
-        {
-          chunkX=this.max
-        }
-      }
+      var localX=chunkX-this.x+1;
+      var localY=chunkY-this.y+1;
 
-      if(chunkMap.y==0)
+      if(localX>=0 && localX<=2 && localY>=0 && localY<=2)
       {
-        if(chunkY==(this.max-1))
-        {
-          chunkY=-1
-        }
+        log('Saving objects ('+chunkX+','+chunkY+') as ('+localX+','+localY+')');
+        chunkMap.objects[localY][localX]=objects;
       }
-
-      if(chunkMap.y==(this.max-1))
+      else
       {
-        if(chunkY==0)
-        {
-          chunkY=this.max
-        }
+        log('Chunk not local '+chunkX+' '+chunkY+' '+localX+' '+localY);
       }
     }
 
-    var localX=chunkX-this.x+1;
-    var localY=chunkY-this.y+1;
+    this.sendObjectChanges();
+  }
 
-    if(localX>=0 && localX<=2 && localY>=0 && localY<=2)
-    {
-      log('Saving objects ('+chunkX+','+chunkY+') as ('+localX+','+localY+')');
-      chunkMap.objects[localY][localX]=objects;
-    }
-    else
-    {
-      log('Chunk not local '+chunkX+' '+chunkY+' '+localX+' '+localY);
-    }
-
+  this.sendObjectChanges=function()
+  {
+//    log('sendObjectChanges');
     var oldList=chunkMap.objectList;
     chunkMap.objectList=chunkMap.objectsFromChunks();
 
-    log('comparing lists:');
-    log(oldList);
-    log(chunkMap.objectList);
+//    log('comparing lists:');
+//    log(oldList);
+//    log(chunkMap.objectList);
 
     var diffs=chunkMap.diff(chunkMap.objectList, oldList);
     var adds=diffs[0];
     var dels=diffs[1];
 
-    log(diffs);
+//    log('diffs:');
+//    log(diffs);
 
     if(dels.length>0 && chunkMap.delObjCallback!=null)
     {
       chunkMap.delObjCallback(dels);
+      gbox.purgeGarbage()
     }
-
-    gbox.purgeGarbage()
 
     if(adds.length>0 && chunkMap.addObjCallback!=null)
     {
@@ -322,8 +342,8 @@ ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
 
   this.objectsLoaderCallback=function(e)
   {
-//    log('loader callback:');
-//    log(e.data);
+    log('loader callback:');
+    log(e.data);
     var args=e.data;
 
     if(args!=null)
@@ -331,7 +351,7 @@ ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
       var docname=args['viewkey'];
       var data=args['results'];
 
-      if(data.length>0)
+      if(data!=null)
       {
         chunkMap.gotObjects(docname, data);
       }
@@ -345,12 +365,16 @@ ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
     var viewid='objectsByChunk';
     var key=x+'_'+y;
 
-    if(key in this.cache)
+    if(this.cache.hasOwnProperty(key))
     {
       this.gotObjects(key, this.cache[key]);
     }
     else
     {
+      log('not in cache: '+key);
+      log(key);
+      log(this.cache);
+
       loader=new Worker('viewLoader.js');
       loader.onmessage=this.objectsLoaderCallback;
       loader.onerror=function(e) {
@@ -369,6 +393,8 @@ ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
 //    log('gotChunk: '+docname);
 
     this.cache[docname]=chunk;
+
+    this.chunksLoaded=this.chunksLoaded+1;
 
     var parts=docname.split('-');
     var coords=parts[1].split('_');
@@ -425,10 +451,19 @@ ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
 
     var map=chunkMap.mapFromChunks();
 
-    if(callback)
+    if(callback!=null && this.chunksLoaded%3==0) // Don't redraw map on every chunk loaded, as it slows down boundary crossings
     {
       callback();
     }
+  }
+
+  this.loaderCallback=function(e)
+  {
+    var args=e.data;
+    var docname=args['docname'];
+    var data=args['data'];
+
+    chunkMap.gotChunk(docname, data);
   }
 
   this.loadChunk=function(dbid, x, y)
@@ -478,15 +513,6 @@ ChunkMap=function(dbname, x, y, callback, addObj, delObj) {
     }
 
     this.loadObjects(dbid, x, y);
-  }
-
-  this.loaderCallback=function(e)
-  {
-    var args=e.data;
-    var docname=args['docname'];
-    var data=args['data'];
-
-    chunkMap.gotChunk(docname, data);
   }
 
   this.loadConfig(this.dbname);
