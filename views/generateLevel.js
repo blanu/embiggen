@@ -20,14 +20,11 @@ exports.GET = function (request) {
 exports.POST = function (request) {
     logging.info("generating Level...");
     var params = new Request(request).params
-    logging.info("params: "+JSON.stringify(params));
-
     params=JSON.parse(params['value']);
-    logging.info("params: "+JSON.stringify(params));
 
     var levelName=params;
 
-    logging.info('Generating '+levelName);
+    logging.info("Generating "+levelName);
 
     return {
       status: 200,
