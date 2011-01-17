@@ -19,7 +19,7 @@ exports.GET = function (request) {
 
 exports.POST = function (request) {
     logging.info("generating Level...");
-    var params = new Request(request).params
+    var params = new Request(request).params;
     params=JSON.parse(params['value']);
 
     var levelName=params;
