@@ -1,7 +1,9 @@
 exports.map = function (params)
 {
+    console.log('params: '+params);
     if(params['type']=='object')
     {
+      console.log('object');
       var chunkX=params['chunkX'];
       var chunkY=params['chunkY'];
       var chunkId=chunkX+'_'+chunkY;
@@ -10,6 +12,7 @@ exports.map = function (params)
     }
     else
     {
+      console.log('not object');
       return ["null"];
     }
 }
