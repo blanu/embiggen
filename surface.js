@@ -3,19 +3,29 @@ var chunkmap;
 var mapdata;
 var map=null;
 var orientation=false;
-var center=Math.floor((16*16*3)/2)+8;
-var lowEdge=(center-128)-16;
-var highEdge=(center+128)-16;
+var tilePixels=16;
+var worldTiles=16*3;
+var worldPixels=worldTiles*tilePixels;
+var center=Math.floor(worldPixels/2);
+var lowEdge=0;
+var highEdge=worldPixels-tilePixels;
+var jumpDistance=tilePixels*2;
 var triggered=false;
+var playerDoc=null;
 var playerData=null;
+var mapObjects=null;
+var mapIds=null;
+var nextId=0;
+var mana=0;
+var health=100;
 
 triggers={
-  teleport: function(args) {
+	  teleport: function(args) {
     var world=args.world;
-    var chunkX=args.chunkX;
-    var chunkY=args.chunkY;
-
-    log('teleporting to '+world+'/('+chunkX+','+chunkY+')');
+    log('teleporting to '+world);
+    playerData.world=world;
+    playerDoc.save(playerData);
+    maingame.gotoLevel(world);
   }
 };
 
@@ -77,7 +87,7 @@ function moveObjects(offsetX, offsetY)
 {
   var objs=chunkmap.objectsFromChunks();
   log('moving:');
-  log(objs);
+//  log(objs);
   for(var i=0; i<objs.length; i++)
   {
     var obj=objs[i];
@@ -89,12 +99,18 @@ function moveObjects(offsetX, offsetY)
   }
 }
 
-function addPlayer(tile, x, y) {
+function addPlayer() {
+  var tile=playerData.tile;
+  var x=playerData.x*16;
+  var y=playerData.y*16;
+
   gbox.addObject({
     id: 'player',
     group: 'chars',
     tileset: 'charTiles',
     colh:gbox.getTiles('charTiles').tileh,
+    x: x,
+    y: y,
 
     initialize: function()
     {
@@ -135,35 +151,57 @@ function addPlayer(tile, x, y) {
       }
       // else, leave it as it is
 
-      var offsetX=0;
-      var offsetY=0;
+//      var offsetX=0;
+//      var offsetY=0;
 
       if(this.x<lowEdge)
       {
-        this.x=this.x+256;
-        offsetX=-1;
+        this.x=lowEdge;
       }
       else if(this.x>highEdge)
       {
-        this.x=this.x-256;
-        offsetX=1;
+        this.x=highEdge;
       }
 
       if(this.y<lowEdge)
       {
-        this.y=this.y+256;
-        offsetY=-1;
+        this.y=lowEdge;
       }
       else if(this.y>highEdge)
       {
-        this.y=this.y-256;
-        offsetY=1;
+        this.y=highEdge;
       }
 
+      /*
       if(offsetX!=0 || offsetY!=0)
       {
         moveObjects(offsetX, offsetY);
         chunkmap.move(offsetX, offsetY);
+      }
+      */
+
+      if(gbox.keyIsHit('a'))
+      {
+        this.action();
+      }
+    },
+
+    action: function()
+    {
+      log('action!');
+      var tileX=Math.floor(this.x/16);
+      var tileY=Math.floor(this.y/16);      
+      log('tile coords: '+tileX+' '+tileY);
+   
+      var tileState=chunkmap.get(tileX, tileY);
+      log('tileState: '+tileState);
+      if(tileState==-1)
+      {
+        chunkmap.put(tileX, tileY, 106);
+      }
+      else
+      {
+        chunkmap.put(tileX, tileY, -1);
       }
     },
 
@@ -183,9 +221,9 @@ function addPlayer(tile, x, y) {
   });
 }
 
-function gotPlayer(doc, data)
+function gotPlayer(data)
 {
-  log('got player');
+  log('got player: '+data);
   log(data);
   playerData=data;
 
@@ -204,8 +242,33 @@ function followCamera(obj, viewdata)
   if ((obj.y - ycam) < (ybuf)) gbox.setCameraY(ycam + (obj.y - ycam) - (ybuf),viewdata);
 }
 
+function chunkAnimate()
+{
+  log('chunkAnimate');
+  chunkmap.animate();
+}
+
 function addMap()
 {
+  log("playerData: ");
+  log(playerData);
+  chunkmap=ChunkMap(playerData.world, playerData.x, playerData.y, function() {
+    if(map!=null)
+    {
+      mapdata=chunkmap.mapFromChunks();
+      map.map=mapdata;
+      gbox.blitTilemap(gbox.getCanvasContext('map_canvas'), map);
+    }
+    else
+    {
+      log('map undefined');
+    }
+  }, handleObjects);
+
+  chunkmap.move(0,0);
+  chunkmap.load();
+  mapdata=chunkmap.mapFromChunks();
+
   map = {
     tileset: 'terrainTiles',
     map: mapdata,
@@ -228,6 +291,9 @@ function addMap()
       updateHUD();
     }
   });
+
+  gbox.createCanvas('map_canvas', { w: map.w, h: map.h });
+  gbox.blitTilemap(gbox.getCanvasContext('map_canvas'), map);
 }
 
 function addHUD()
@@ -235,8 +301,17 @@ function addHUD()
   maingame.hud.setWidget('mana', {
     widget: 'label',
     font:   'small',
-    value:  0,
+    value:  mana,
     dx:     40,
+    dy:     25,
+    clear:  true
+  });
+
+  maingame.hud.setWidget('health', {
+    widget: 'label',
+    font:   'small',
+    value:  health,
+    dx:     200,
     dy:     25,
     clear:  true
   });
@@ -244,53 +319,157 @@ function addHUD()
 
 function updateHUD()
 {
-  maingame.hud.setValue('mana', 'value', 0);
+  maingame.hud.setValue('mana', 'value', mana);
+  maingame.hud.setValue('health', 'value', health);
   maingame.hud.redraw();
 }
 
-function addObjects(objs)
+function getId()
 {
-  log('addObjects');
-  log(objs);
+  var id=nextId;
+  nextId=nextId+1;
+  return id.toString();
+}
 
-  for(var i=0; i<objs.length; i++)
+function diffMaps(a, b)
+{
+  var adds=[];
+  var dels=[];
+
+  if(a==null)
   {
-    var obj=objs[i];
-    log(obj);
-    var id=obj.objectId;
-    var chunkX=obj.chunkX;
-    var chunkY=obj['chunkY'];
-    var tileX=obj['tileX'];
-    var tileY=obj['tileY'];
-    var frame=obj['tile'];
-    var trigger=null;
-    var config=null;
-    if(obj.hasOwnProperty('trigger'))
+    mapObjects=getBlankGrid(worldTiles);
+    mapIds=getBlankGrid(worldTiles);
+    for(var y=0; y<worldTiles; y++)
     {
-      trigger=obj.trigger;
-      config=obj.config;
+      for(var x=0; x<worldTiles; x++)
+      {
+        tileB=b[y][x];
+        
+        if(tileB!=-1)
+        {
+          adds.push([x, y]);
+        }
+
+        mapObjects[y][x]=tileB;
+      }
     }
+  }
+  else
+  {
+    for(var y=0; y<worldTiles; y++)
+    {
+      for(var x=0; x<worldTiles; x++)
+      {
+        tileA=a[y][x];
+        tileB=b[y][x];
 
-    var localX=chunkX-chunkmap.x+1;
-    var localY=chunkY-chunkmap.y+1;
+        mapObjects[y][x]=tileB;
 
-    log('trying to add '+chunkX+' '+chunkY+' '+tileX+' '+tileY+' '+frame);
+        if(tileA==tileB)
+        {
+          continue;
+        }
+        else
+        {
+          if(tileA==-1)
+          {
+            adds.push([x,y]);
+          }
+          else
+          {
+            dels.push([x,y]);
+          }
+        }
+      }
+    }
+  }
+
+  var objAdds=[];
+  var objMoves=[];
+  var objDels=[];
+
+  for(var i=0; i<adds.length && i<dels.length; i++)
+  {
+    objMoves.push([dels[i], adds[i]]);
+  }
+
+  if(adds.length>dels.length)
+  {
+    for(var j=i; j<adds.length; j++)
+    {
+      objAdds.push(adds[j]);
+    }
+  }
+  else if(dels.length>adds.length)
+  {
+    for(var j=i; j<dels.length; j++)
+    {
+      objDels.push(dels[j]);
+    }
+  }
+
+  return [objAdds, objMoves, objDels];
+}
+
+function damage()
+{
+  var player=gbox.getObject("chars","player");
+  log('player:');
+  log(player);
+  var cx=player.x+tilePixels/2;
+  var cy=player.y+tilePixels/2;
+  var tileX=Math.floor(cx/tilePixels);
+  var tileY=Math.floor(cy/tilePixels);
+  log('tileX: '+tileX+' tileY: '+tileY);
+  var tile=mapObjects[tileY][tileX];
+  if(tile==106)
+  {
+    health=health-1;
+    if(health==0)
+    {
+      log('dead!');
+    }
+    else if(health<0)
+    {
+      health=0;
+    }
+  }
+}
+
+function handleObjects(objs)
+{
+  log('handleObjects');
+
+  var results=diffMaps(mapObjects, objs);
+  var addObjs=results[0];
+  var moveObjs=results[1];
+  var delObjs=results[2];
+
+  for(var i=0; i<addObjs.length; i++)
+  {
+    var obj=addObjs[i];
+    var x=obj[0];
+    var y=obj[1];
+
+    log('adding');
+    var id=getId();
+    var obj={'x': x, 'y': y, 'frame': 106, 'id': id};
+    mapIds[y][x]=id;
 
     gbox.addObject({
       id: id,
+      object: obj,
       group: 'objects',
       tileset: 'objectTiles',
       colh:gbox.getTiles('objectTiles').tileh,
-      trigger: trigger,
-      config: config,
 
       initialize: function()
       {
         toys.topview.initialize(this, {});
-        this.x = (localX*16*16)+(tileX*16);
-        this.y = (localY*16*16)+(tileY*16);
-        this.frame=frame;
-        log('added object '+this.id+':'+this.x+','+this.y+'/'+this.frame);
+        this.x = this.object.x*16;
+        this.y = this.object.y*16;
+        this.frame=this.object.frame;
       },
 
       first: function()
@@ -321,24 +500,51 @@ function addObjects(objs)
         });
       },
     });
-  }
-}
+  } 
 
-function delObjects(objs)
-{
-  log('delObjects');
-  log(objs);
-
-  for(var i=0; i<objs.length; i++)
+  for(var i=0; i<moveObjs.length; i++)
   {
-    var obj=objs[i];
-    log(obj);
+    var obj=moveObjs[i];
+    var from=obj[0];
+    var to=obj[1];
+    var fromx=from[0];
+    var fromy=from[1];
+    var tox=to[0];
+    var toy=to[1];
+    var id=mapIds[fromy][fromx];
+    mapIds[toy][tox]=id;
 
-    var id=obj.objectId;
-    var o=gbox.getObject('objects', id);
-
-    gbox.trashObject(o);
+    var obj=gbox.getObject('objects', id);
+    if(obj!==undefined)
+    {
+      obj.x=tox*16;
+      obj.y=toy*16;
+    }
+    else
+    {
+      log(id+' is missing');
+    }
   }
+
+  for(var i=0; i<delObjs.length; i++)
+  {
+    var obj=delObjs[i];
+    var x=obj[0];
+    var y=obj[1];
+    var id=mapIds[y][x];
+    mapIds[y][x]=null;
+
+    log('deleting '+id);
+    var o=gbox.getObject('objects', id);
+    if(o!==undefined)
+    {
+      gbox.trashObject(o);
+    }    
+  }
+
+  gbox.purgeGarbage()
+
+  damage();
 }
 
 function main()
@@ -357,37 +563,19 @@ function main()
   maingame.initializeGame=function()
   {
     log("initializeGame");
-    var x=(playerData.chunkX*16*16)+(playerData.tileX*16);
-    var y=(playerData.chunkY*16*16)+(playerData.tileY*16);
-    addPlayer(playerData.tile, x, y);
-
-    // First load map, then start game
-    chunkmap=ChunkMap(playerData.world, playerData.chunkX, playerData.chunkY, function() {
-      if(map!=null)
-      {
-        mapdata=chunkmap.mapFromChunks();
-        map.map=mapdata;
-        gbox.blitTilemap(gbox.getCanvasContext('map_canvas'), map);
-      }
-      else
-      {
-        log('map undefined');
-      }
-    }, addObjects, delObjects);
-
-    mapdata=chunkmap.mapFromChunks();
-
-    addMap();
-
-    gbox.createCanvas('map_canvas', { w: map.w, h: map.h });
-    gbox.blitTilemap(gbox.getCanvasContext('map_canvas'), map);
-
     addHUD();
   }
 
-  maingame.changeLevel=function()
+  maingame.changeLevel=function(level)
   {
     log("changeLevel");
+    gbox.trashGroup('terrain');
+    gbox.trashGroup('objects');
+    gbox.trashGroup('chars');
+    gbox.purgeGarbage();
+
+    addPlayer();
+    addMap();
   }
 }
 
